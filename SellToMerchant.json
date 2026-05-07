@@ -1,0 +1,11 @@
+{
+  "id": "SellToMerchant",
+  "name": "SellToMerchant - \u5546\u5e97\u51fa\u552e",
+  "author": "dz-knight",
+  "description": "\u5728\u5546\u5e97\u51fa\u552e\u5361\u724c\u3001\u9057\u7269\u548c\u836f\u6c34\u6362\u53d6\u91d1\u5e01\uff0c\u652f\u6301\u8054\u673a\u8f6c\u8d26\uff0c\u517c\u5bb9\u6b63\u5f0f\u7248\u548c public-beta \u7248\u672c\u3002",
+  "version": "1.0.2",
+  "has_pck": false,
+  "has_dll": true,
+  "dependencies": [],
+  "affects_gameplay": true
+}

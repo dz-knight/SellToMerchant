@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <LangVersion>13</LangVersion>
+    <Nullable>enable</Nullable>
+    <AssemblyName>SellToMerchant</AssemblyName>
+    <RootNamespace>SellToMerchant</RootNamespace>
+    <PlatformTarget>x64</PlatformTarget>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 游戏本体 DLL -->
+    <Reference Include="sts2">
+      <HintPath>libs\sts2.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <!-- Harmony（游戏内置） -->
+    <Reference Include="0Harmony">
+      <HintPath>libs\0Harmony.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="GodotSharp" Version="4.5.1" />
+  </ItemGroup>
+
+  <!-- 编译后复制到 build 目录 -->
+  <Target Name="PostBuild" AfterTargets="PostBuildEvent">
+    <Exec Command="copy /Y &quot;$(TargetDir)$(ProjectName).dll&quot; &quot;$(ProjectDir)&quot;" />
+  </Target>
+
+</Project>

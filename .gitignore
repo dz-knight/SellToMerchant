@@ -1,0 +1,13 @@
+bin/
+obj/
+package/
+dist/*
+!dist/*.zip
+*.user
+*.suo
+*.log
+*.update-state.json
+
+# Game/runtime assemblies copied locally for building.
+libs/*.dll
+!libs/.gitkeep
