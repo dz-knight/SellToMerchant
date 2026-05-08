@@ -33,6 +33,7 @@ namespace SellToMerchant
         private static readonly HashSet<ulong> _nativeSelectionBoundNodes = new();
         private static readonly HashSet<ulong> _nativeSelectionScannedNodes = new();
         private static readonly Dictionary<ulong, (Control displayControl, Control hitControl, int price)> _nativeSelectionPriceTargets = new();
+        private static IReadOnlyList<CardModel> _currentSellableCards = Array.Empty<CardModel>();
         private static NativeSelectionKind _nativeSelectionKind;
 
         private static RelicModel? _selectedRelic;
@@ -234,6 +235,7 @@ namespace SellToMerchant
             ClosePopup();
 
             var prefs = BuildCardSellSelectorPrefs();
+            _currentSellableCards = cards;
             StartNativeSelectionPriceWatcher(NativeSelectionKind.Card);
             GD.Print("[SellToMerchant] Opening native card sell selector.");
             try
@@ -628,6 +630,7 @@ namespace SellToMerchant
             _nativeSelectionBoundNodes.Clear();
             _nativeSelectionScannedNodes.Clear();
             _nativeSelectionPriceTargets.Clear();
+            _currentSellableCards = Array.Empty<CardModel>();
             HideFallbackSellPricePanel();
         }
 
@@ -702,10 +705,13 @@ namespace SellToMerchant
             hitControl = control;
             price = 0;
 
-            if (kind == NativeSelectionKind.Card && TryResolveModel<CardModel>(control, out var card))
+            if (kind == NativeSelectionKind.Card)
             {
                 var holder = FindNativeCardSelectionHolder(control);
-                if (holder == null)
+                if (holder == null || !IsDeckCardSelectionHolder(holder))
+                    return false;
+
+                if (!TryResolveDisplayedCardModel(control, holder, out var card))
                     return false;
 
                 if (!ShopSellManager.CanSellCard(card))
@@ -718,8 +724,8 @@ namespace SellToMerchant
                     return false;
                 }
 
-                displayControl = control;
-                hitControl = control;
+                displayControl = holder;
+                hitControl = holder;
                 return true;
             }
 
@@ -742,6 +748,169 @@ namespace SellToMerchant
             }
 
             return null;
+        }
+
+        private static bool IsDeckCardSelectionHolder(Control holder)
+        {
+            Node? current = holder;
+            for (int depth = 0; depth < 12 && current != null; depth++)
+            {
+                var typeName = current.GetType().FullName ?? current.GetType().Name;
+                if (typeName.Contains("Screens.CardSelection.NDeckCardSelectScreen", StringComparison.Ordinal))
+                    return true;
+
+                current = current.GetParent();
+            }
+
+            return false;
+        }
+
+        private static bool TryResolveDisplayedCardModel(Control control, Control holder, out CardModel card)
+        {
+            foreach (var candidate in EnumerateCandidateCardControls(control, holder))
+            {
+                if (TryResolveDirectModel<CardModel>(candidate, out var resolved) &&
+                    TryNormalizeSellableCard(resolved, out card))
+                    return true;
+            }
+
+            foreach (var candidate in EnumerateCandidateCardControls(control, holder))
+            {
+                if (TryResolveModel<CardModel>(candidate, out var resolved) &&
+                    TryNormalizeSellableCard(resolved, out card))
+                    return true;
+            }
+
+            card = null!;
+            return false;
+        }
+
+        private static IEnumerable<Control> EnumerateCandidateCardControls(Control control, Control holder)
+        {
+            var ordered = new List<Control>();
+            var seen = new HashSet<ulong>();
+
+            AddCandidateControl(control, ordered, seen);
+            AddCandidateControl(holder, ordered, seen);
+            CollectCandidateCardControls(holder, ordered, seen, depth: 0);
+
+            return ordered;
+        }
+
+        private static void AddCandidateControl(Control control, List<Control> ordered, HashSet<ulong> seen)
+        {
+            var id = control.GetInstanceId();
+            if (seen.Add(id))
+                ordered.Add(control);
+        }
+
+        private static void CollectCandidateCardControls(Node node, List<Control> ordered, HashSet<ulong> seen, int depth)
+        {
+            if (depth > 3)
+                return;
+
+            if (node is Control control)
+            {
+                var typeName = control.GetType().FullName ?? control.GetType().Name;
+                if (typeName.Contains(".Cards.NCard", StringComparison.Ordinal) ||
+                    typeName.Contains("NCardHolderHitbox", StringComparison.Ordinal) ||
+                    typeName.Contains("NGridCardHolder", StringComparison.Ordinal))
+                {
+                    AddCandidateControl(control, ordered, seen);
+                }
+            }
+
+            foreach (var child in node.GetChildren())
+            {
+                if (child is Node childNode)
+                    CollectCandidateCardControls(childNode, ordered, seen, depth + 1);
+            }
+        }
+
+        private static bool TryNormalizeSellableCard(CardModel candidate, out CardModel card)
+        {
+            if (_currentSellableCards.Count == 0)
+            {
+                card = candidate;
+                return true;
+            }
+
+            if (_currentSellableCards.Contains(candidate))
+            {
+                card = candidate;
+                return true;
+            }
+
+            var candidateId = candidate.Id?.ToString() ?? string.Empty;
+            var candidateTitle = SafeItemName(candidate.Title, candidate.Id?.ToString() ?? string.Empty);
+
+            var matches = _currentSellableCards
+                .Where(current =>
+                    string.Equals(current.Id?.ToString(), candidateId, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(SafeItemName(current.Title, current.Id?.ToString() ?? string.Empty), candidateTitle, StringComparison.Ordinal))
+                .ToList();
+
+            if (matches.Count == 1)
+            {
+                card = matches[0];
+                return true;
+            }
+
+            var sameRarity = matches.FirstOrDefault(current => current.Rarity == candidate.Rarity);
+            if (sameRarity != null)
+            {
+                card = sameRarity;
+                return true;
+            }
+
+            card = null!;
+            return false;
+        }
+
+        private static bool TryResolveDirectModel<TModel>(object source, out TModel model) where TModel : class
+        {
+            const System.Reflection.BindingFlags flags =
+                System.Reflection.BindingFlags.Instance |
+                System.Reflection.BindingFlags.Public |
+                System.Reflection.BindingFlags.NonPublic;
+
+            foreach (var memberName in new[] { "Card", "CardModel", "_card", "_cardModel", "Model", "_model" })
+            {
+                var property = source.GetType().GetProperty(memberName, flags);
+                if (property != null && property.GetIndexParameters().Length == 0)
+                {
+                    try
+                    {
+                        if (property.GetValue(source) is TModel foundFromProperty)
+                        {
+                            model = foundFromProperty;
+                            return true;
+                        }
+                    }
+                    catch
+                    {
+                    }
+                }
+
+                var field = source.GetType().GetField(memberName, flags);
+                if (field != null)
+                {
+                    try
+                    {
+                        if (field.GetValue(source) is TModel foundFromField)
+                        {
+                            model = foundFromField;
+                            return true;
+                        }
+                    }
+                    catch
+                    {
+                    }
+                }
+            }
+
+            model = null!;
+            return false;
         }
 
         private static void UpdateNativeSelectionPricePanels()

@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.0.4
+
+- Fixed public-beta v0.105.0 compatibility for native card sell price binding.
+- Normalized resolved card models against the actual sellable deck list to avoid wrong 25/37/75 gold prices.
+- Restricted native card price binding to the real deck selection holder.
+- Added unsellable protection for newly added Neow relics.
+- Rebuilt and revalidated the package against public-beta v0.105.0.
+
 ## v1.0.3
 
 - Fixed card sell price tooltip showing wrong price when many cards are in the same grid — display control key collision caused only the last-scanned card's price to be stored.

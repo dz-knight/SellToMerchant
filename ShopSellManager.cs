@@ -27,6 +27,13 @@ namespace SellToMerchant
             "PureWater", "HolyWater", "VioletLotus"
         };
 
+        private static readonly HashSet<string> UnsellableRelicTitles = new(System.StringComparer.OrdinalIgnoreCase)
+        {
+            "Neow's Bones",
+            "Phial Holster",
+            "Winged Boots"
+        };
+
         private const int CommonPrice   = 25;
         private const int UncommonPrice = 37;
         private const int RarePrice     = 75;
@@ -60,6 +67,8 @@ namespace SellToMerchant
             if (RelicSoldThisShop) return false;
             string id = relic.Id.ToString();
             if (UnsellableRelicIds.Contains(id)) return false;
+            var title = relic.Title?.GetFormattedText();
+            if (!string.IsNullOrWhiteSpace(title) && UnsellableRelicTitles.Contains(title)) return false;
             if (relic.Rarity == RelicRarity.Starter) return false;
             if (relic.Rarity == RelicRarity.Event) return false;
             if (relic.Rarity == RelicRarity.Ancient) return false;

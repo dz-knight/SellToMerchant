@@ -1,63 +1,78 @@
 # SellToMerchant
 
-Slay the Spire 2 商店出售功能 Mod。
+Sell cards, relics, and potions at the merchant in Slay the Spire 2.
 
-## 功能
+## Features
 
-- 在商店内出售卡牌、遗物和药水获得金币。
-- 卡牌售价只在卡牌选择界面悬停时显示，避免大量卡牌时持续绘制造成卡顿。
-- 遗物和药水出售窗口支持拖动，列表内容过多时支持滚轮滚动。
-- 联机时支持向队友转账金币，单次上限 200G。
-- 自动按游戏分支选择 stable 或 public-beta 发布包。
+- Sell removable cards for gold at the merchant.
+- Sell eligible relics and potions for gold.
+- Show card sell price only while hovering in the native deck-removal selector.
+- Support draggable relic and potion sell windows with wheel scrolling.
+- Support branch-aware auto update for `stable` and `public-beta`.
 
-## 价格规则
+## Pricing
 
-- 普通卡牌/药水：25 金币。
-- 罕见卡牌/药水：37 金币。
-- 稀有卡牌/药水：75 金币。
-- 遗物：商店价格的一半。
-- 基础牌、状态牌、诅咒牌、任务牌、事件牌、Token 牌、初始遗物、事件遗物等不可出售。
+- Common card or potion: 25 gold
+- Uncommon card or potion: 37 gold
+- Rare card or potion: 75 gold
+- Relic: half of merchant cost
 
-## 安装
+Cards that are basic, status, curse, quest, event, token, or otherwise not removable are excluded.
+Starter relics, event relics, ancient relics, and specific protected relics are excluded.
 
-1. 从 GitHub Release 下载对应版本：
-   - 正式版：`SellToMerchant-stable.zip`
-   - public-beta：`SellToMerchant-public-beta.zip`
-2. 解压到游戏 Mod 目录：
-   `Slay the Spire 2/mods/SellToMerchant`
-3. 确认目录内存在：
+## Installation
+
+1. Download the correct package from GitHub Releases:
+   - `SellToMerchant-stable.zip`
+   - `SellToMerchant-public-beta.zip`
+2. Extract to `Slay the Spire 2/mods/SellToMerchant`
+3. Make sure the folder contains:
    - `SellToMerchant.dll`
    - `SellToMerchant.json`
-4. 重启游戏。
+4. Restart the game.
 
-## 构建
+## Build
 
-项目目标框架为 `.NET 9`。
+Target framework: `.NET 9`
 
-本地构建前需要在 `libs/` 目录放入游戏运行时依赖：
+Required local build dependencies in `libs/`:
 
 - `sts2.dll`
 - `0Harmony.dll`
 
-构建命令：
+Build command:
 
 ```powershell
 dotnet build .\SellToMerchant.csproj -c Release
 ```
 
-Release DLL 输出位置：
+## Release Notes
 
-```text
-bin/Release/net9.0/SellToMerchant.dll
-```
+### v1.0.4
 
-## v1.0.2
+- Fixed public-beta v0.105.0 compatibility for native card sell price binding.
+- Normalized resolved card models against the actual sellable deck list to prevent wrong 25/37/75 gold prices.
+- Restricted native price binding to the real deck selection holder instead of unrelated card-like controls.
+- Added protection for new Neow relics so they are never treated as sellable relics.
+- Rebuilt and revalidated the mod package against public-beta v0.105.0.
 
-- 修复卡牌售价显示路径，统一改为悬停小浮窗。
-- 删除旧的右侧 HoverTip 售价显示逻辑，避免与卡牌关键词提示冲突。
-- 优化悬停检测热路径，优先使用控件自身矩形，减少子树递归扫描。
-- 更新自动更新仓库与版本号。
+### v1.0.3
 
-## 兼容性
+- Fixed wrong card sell prices when many sellable cards were present in the merchant card selector.
+- Improved `TryResolveModel` matching for wrapped or interface-typed card models.
+- Adjusted price hover and drag behavior.
+- Removed more obsolete tooltip code paths.
+- Synced repository documentation for the release.
 
-该 Mod 面向 Slay the Spire 2 当前正式版和 public-beta 分支。由于游戏仍在更新，若游戏 API 发生变化，可能需要重新编译。
+### v1.0.2
+
+- Switched card sell price display to a compact hover panel.
+- Removed the old right-side hover tooltip path.
+- Optimized hover hit testing.
+- Kept relic and potion drag/scroll support.
+- Updated auto update repository metadata.
+
+## Compatibility
+
+Validated against Slay the Spire 2 `public-beta v0.105.0`.
+Future game updates may require another rebuild if UI or model structures change.
