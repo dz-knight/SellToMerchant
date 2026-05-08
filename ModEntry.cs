@@ -12,7 +12,7 @@ namespace SellToMerchant
 
         public static void Initialize()
         {
-            GD.Print("[SellToMerchant] Initializing v1.0.2...");
+            GD.Print("[SellToMerchant] Initializing v1.0.3...");
 
             _harmony = new Harmony(HarmonyId);
             _harmony.PatchAll();

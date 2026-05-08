@@ -12,7 +12,7 @@ namespace SellToMerchant
     public static class AutoUpdate
     {
         private const string GithubRepo = "dz-knight/SellToMerchant";
-        private const string CurrentVersion = "1.0.2";
+        private const string CurrentVersion = "1.0.3";
         private const string StateFileName = "SellToMerchant.update-state.json";
 
         private static readonly System.Net.Http.HttpClient Http = new()
