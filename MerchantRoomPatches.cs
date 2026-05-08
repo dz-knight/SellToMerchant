@@ -26,16 +26,16 @@ namespace SellToMerchant
         private static NMegaLineEdit? _amountInput;
         private static Player? _selectedReceiver;
         private static CanvasLayer? _uiLayer;
-        private static Control? _draggedPopup;
+        private static Control? _draggedControl;
         private static PanelContainer? _fallbackSellPricePanel;
         private static Label? _fallbackSellPriceTitle;
         private static Label? _fallbackSellPriceBody;
         private static readonly HashSet<ulong> _nativeSelectionBoundNodes = new();
         private static readonly HashSet<ulong> _nativeSelectionScannedNodes = new();
         private static readonly Dictionary<ulong, (Control displayControl, Control hitControl, int price)> _nativeSelectionPriceTargets = new();
+        private static IReadOnlyList<CardModel> _currentSellableCards = Array.Empty<CardModel>();
         private static NativeSelectionKind _nativeSelectionKind;
 
-        private static CardModel? _selectedCard;
         private static RelicModel? _selectedRelic;
         private static PotionModel? _selectedPotion;
 
@@ -176,6 +176,9 @@ namespace SellToMerchant
                 curY += btnH + gap;
             }
 
+            // 使面板可通过背景和标题拖动
+            MakePopupDraggable(_sidePanel, panelBg, border, title);
+
             _uiLayer!.AddChild(_sidePanel);
         }
 
@@ -232,6 +235,7 @@ namespace SellToMerchant
             ClosePopup();
 
             var prefs = BuildCardSellSelectorPrefs();
+            _currentSellableCards = cards;
             StartNativeSelectionPriceWatcher(NativeSelectionKind.Card);
             GD.Print("[SellToMerchant] Opening native card sell selector.");
             try
@@ -251,106 +255,6 @@ namespace SellToMerchant
             {
                 StopNativeSelectionPriceWatcher();
             }
-        }
-
-        private static void ShowCardSellPopup(Player player, List<CardModel> cards)
-        {
-            ClosePopup();
-            _selectedCard = null;
-
-            float popupW = 320, btnH = 30, gap = 4;
-            int maxVisible = 12;
-            float listH = Math.Min(cards.Count, maxVisible) * (btnH + gap) + gap;
-            float totalListH = cards.Count * (btnH + gap) + gap;
-            bool needScroll = cards.Count > maxVisible;
-            float popupH = 56 + listH + (btnH + 16);
-
-            _popup = new Control();
-            _popup.Position = new Vector2(240, 80);
-
-            var bg = new ColorRect();
-            bg.Color = new Color(0, 0, 0, 0.92f);
-            bg.Size = new Vector2(popupW, popupH);
-            _popup.AddChild(bg);
-
-            var title = new Label
-            {
-                Text = "选择要出售的卡牌（悬停查看价格）",
-                Position = new Vector2(10, 8),
-                Size = new Vector2(popupW - 20, 20)
-            };
-            _popup.AddChild(title);
-
-            MakePopupDraggable(_popup, bg, title);
-
-            float listY = 34;
-
-            if (needScroll)
-            {
-                var scroll = new ScrollContainer
-                {
-                    Position = new Vector2(8, listY),
-                    Size = new Vector2(popupW - 16, listH)
-                };
-                scroll.HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled;
-
-                var listContent = new Control
-                {
-                    Size = new Vector2(popupW - 32, totalListH)
-                };
-
-                float rowY = 0;
-                foreach (var card in cards)
-                {
-                    var row = BuildCardRow(card, new Vector2(0, rowY), new Vector2(popupW - 32, btnH));
-                    listContent.AddChild(row);
-                    rowY += btnH + gap;
-                }
-
-                scroll.AddChild(listContent);
-                _popup.AddChild(scroll);
-            }
-            else
-            {
-                float rowY = listY;
-                foreach (var card in cards)
-                {
-                    var row = BuildCardRow(card, new Vector2(12, rowY), new Vector2(popupW - 24, btnH));
-                    _popup.AddChild(row);
-                    rowY += btnH + gap;
-                }
-            }
-
-            float btnY = listY + listH + 8;
-
-            var (confirmBtn, _) = MakeButton("确定出售",
-                new Vector2(50, btnY), new Vector2(100, btnH), async () =>
-                {
-                    if (_selectedCard != null)
-                    {
-                        var c = _selectedCard;
-                        ClosePopup();
-                        await ShopSellManager.SellCardAsync(c, player);
-                        RefreshInfoLabels();
-                        UpdateButtonStates();
-                    }
-                });
-            _popup.AddChild(confirmBtn);
-
-            var (cancelBtn, _) = MakeButton("取消",
-                new Vector2(170, btnY), new Vector2(100, btnH), () => ClosePopup());
-            _popup.AddChild(cancelBtn);
-
-            _uiLayer?.AddChild(_popup);
-        }
-
-        private static Control BuildCardRow(CardModel card, Vector2 pos, Vector2 size)
-        {
-            return BuildSelectableRow(
-                SafeItemName(card.Title, card.Id),
-                ShopSellManager.GetCardSellPrice(card),
-                pos, size,
-                () => _selectedCard = card);
         }
 
         // ═══════════════════════════════════════════
@@ -726,6 +630,7 @@ namespace SellToMerchant
             _nativeSelectionBoundNodes.Clear();
             _nativeSelectionScannedNodes.Clear();
             _nativeSelectionPriceTargets.Clear();
+            _currentSellableCards = Array.Empty<CardModel>();
             HideFallbackSellPricePanel();
         }
 
@@ -800,10 +705,13 @@ namespace SellToMerchant
             hitControl = control;
             price = 0;
 
-            if (kind == NativeSelectionKind.Card && TryResolveModel<CardModel>(control, out var card))
+            if (kind == NativeSelectionKind.Card)
             {
                 var holder = FindNativeCardSelectionHolder(control);
-                if (holder == null)
+                if (holder == null || !IsDeckCardSelectionHolder(holder))
+                    return false;
+
+                if (!TryResolveDisplayedCardModel(control, holder, out var card))
                     return false;
 
                 if (!ShopSellManager.CanSellCard(card))
@@ -817,7 +725,7 @@ namespace SellToMerchant
                 }
 
                 displayControl = holder;
-                hitControl = control;
+                hitControl = holder;
                 return true;
             }
 
@@ -840,6 +748,169 @@ namespace SellToMerchant
             }
 
             return null;
+        }
+
+        private static bool IsDeckCardSelectionHolder(Control holder)
+        {
+            Node? current = holder;
+            for (int depth = 0; depth < 12 && current != null; depth++)
+            {
+                var typeName = current.GetType().FullName ?? current.GetType().Name;
+                if (typeName.Contains("Screens.CardSelection.NDeckCardSelectScreen", StringComparison.Ordinal))
+                    return true;
+
+                current = current.GetParent();
+            }
+
+            return false;
+        }
+
+        private static bool TryResolveDisplayedCardModel(Control control, Control holder, out CardModel card)
+        {
+            foreach (var candidate in EnumerateCandidateCardControls(control, holder))
+            {
+                if (TryResolveDirectModel<CardModel>(candidate, out var resolved) &&
+                    TryNormalizeSellableCard(resolved, out card))
+                    return true;
+            }
+
+            foreach (var candidate in EnumerateCandidateCardControls(control, holder))
+            {
+                if (TryResolveModel<CardModel>(candidate, out var resolved) &&
+                    TryNormalizeSellableCard(resolved, out card))
+                    return true;
+            }
+
+            card = null!;
+            return false;
+        }
+
+        private static IEnumerable<Control> EnumerateCandidateCardControls(Control control, Control holder)
+        {
+            var ordered = new List<Control>();
+            var seen = new HashSet<ulong>();
+
+            AddCandidateControl(control, ordered, seen);
+            AddCandidateControl(holder, ordered, seen);
+            CollectCandidateCardControls(holder, ordered, seen, depth: 0);
+
+            return ordered;
+        }
+
+        private static void AddCandidateControl(Control control, List<Control> ordered, HashSet<ulong> seen)
+        {
+            var id = control.GetInstanceId();
+            if (seen.Add(id))
+                ordered.Add(control);
+        }
+
+        private static void CollectCandidateCardControls(Node node, List<Control> ordered, HashSet<ulong> seen, int depth)
+        {
+            if (depth > 3)
+                return;
+
+            if (node is Control control)
+            {
+                var typeName = control.GetType().FullName ?? control.GetType().Name;
+                if (typeName.Contains(".Cards.NCard", StringComparison.Ordinal) ||
+                    typeName.Contains("NCardHolderHitbox", StringComparison.Ordinal) ||
+                    typeName.Contains("NGridCardHolder", StringComparison.Ordinal))
+                {
+                    AddCandidateControl(control, ordered, seen);
+                }
+            }
+
+            foreach (var child in node.GetChildren())
+            {
+                if (child is Node childNode)
+                    CollectCandidateCardControls(childNode, ordered, seen, depth + 1);
+            }
+        }
+
+        private static bool TryNormalizeSellableCard(CardModel candidate, out CardModel card)
+        {
+            if (_currentSellableCards.Count == 0)
+            {
+                card = candidate;
+                return true;
+            }
+
+            if (_currentSellableCards.Contains(candidate))
+            {
+                card = candidate;
+                return true;
+            }
+
+            var candidateId = candidate.Id?.ToString() ?? string.Empty;
+            var candidateTitle = SafeItemName(candidate.Title, candidate.Id?.ToString() ?? string.Empty);
+
+            var matches = _currentSellableCards
+                .Where(current =>
+                    string.Equals(current.Id?.ToString(), candidateId, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(SafeItemName(current.Title, current.Id?.ToString() ?? string.Empty), candidateTitle, StringComparison.Ordinal))
+                .ToList();
+
+            if (matches.Count == 1)
+            {
+                card = matches[0];
+                return true;
+            }
+
+            var sameRarity = matches.FirstOrDefault(current => current.Rarity == candidate.Rarity);
+            if (sameRarity != null)
+            {
+                card = sameRarity;
+                return true;
+            }
+
+            card = null!;
+            return false;
+        }
+
+        private static bool TryResolveDirectModel<TModel>(object source, out TModel model) where TModel : class
+        {
+            const System.Reflection.BindingFlags flags =
+                System.Reflection.BindingFlags.Instance |
+                System.Reflection.BindingFlags.Public |
+                System.Reflection.BindingFlags.NonPublic;
+
+            foreach (var memberName in new[] { "Card", "CardModel", "_card", "_cardModel", "Model", "_model" })
+            {
+                var property = source.GetType().GetProperty(memberName, flags);
+                if (property != null && property.GetIndexParameters().Length == 0)
+                {
+                    try
+                    {
+                        if (property.GetValue(source) is TModel foundFromProperty)
+                        {
+                            model = foundFromProperty;
+                            return true;
+                        }
+                    }
+                    catch
+                    {
+                    }
+                }
+
+                var field = source.GetType().GetField(memberName, flags);
+                if (field != null)
+                {
+                    try
+                    {
+                        if (field.GetValue(source) is TModel foundFromField)
+                        {
+                            model = foundFromField;
+                            return true;
+                        }
+                    }
+                    catch
+                    {
+                    }
+                }
+            }
+
+            model = null!;
+            return false;
         }
 
         private static void UpdateNativeSelectionPricePanels()
@@ -867,7 +938,9 @@ namespace SellToMerchant
             foreach (var property in type.GetProperties(flags))
             {
                 if (property.GetIndexParameters().Length > 0) continue;
-                if (!typeof(TModel).IsAssignableFrom(property.PropertyType)) continue;
+                var propType = property.PropertyType;
+                if (!typeof(TModel).IsAssignableFrom(propType) &&
+                    !propType.IsAssignableFrom(typeof(TModel))) continue;
                 try
                 {
                     if (property.GetValue(source) is TModel foundFromProperty)
@@ -883,7 +956,9 @@ namespace SellToMerchant
 
             foreach (var field in type.GetFields(flags))
             {
-                if (!typeof(TModel).IsAssignableFrom(field.FieldType)) continue;
+                var fieldType = field.FieldType;
+                if (!typeof(TModel).IsAssignableFrom(fieldType) &&
+                    !fieldType.IsAssignableFrom(typeof(TModel))) continue;
                 try
                 {
                     if (field.GetValue(source) is TModel foundFromField)
@@ -917,40 +992,6 @@ namespace SellToMerchant
                 return;
             }
 
-            #if false
-            if (TryFindHoveredPriceTarget(out var customHoveredControl, out var customHoveredPrice))
-            {
-                HideNativeSellPriceTipClone();
-                EnsureFallbackSellPricePanel();
-                if (_fallbackSellPricePanel != null && _fallbackSellPriceTitle != null && _fallbackSellPriceBody != null)
-                {
-                    _fallbackSellPriceTitle.Text = "售价";
-                    _fallbackSellPriceBody.Text = $"{customHoveredPrice} 金币";
-                    _fallbackSellPriceTitle.Text = "\u552e\u4ef7";
-                    _fallbackSellPriceBody.Text = $"{customHoveredPrice} \u91d1\u5e01";
-                    _fallbackSellPricePanel.Position = customHoveredControl.GlobalPosition + new Vector2(customHoveredControl.Size.X + 16f, 24f);
-                    _fallbackSellPricePanel.Visible = true;
-                    return;
-                }
-            }
-
-            if (hoverTipSet != null && hoverContainer != null && templateTip != null &&
-                TryFindHoveredPriceTarget(out var hoveredControlInTip, out var hoveredPriceInTip))
-            {
-                EnsureNativeSellPriceTipClone(hoverContainer, templateTip, topLevel: false);
-                if (_nativeSellPriceTipClone == null)
-                    return;
-
-                ApplySellPriceTipText(_nativeSellPriceTipClone, hoveredPriceInTip);
-                _nativeSellPriceTipClone.Visible = true;
-                if (hoverContainer is Container container)
-                    container.QueueSort();
-                GD.Print($"[SellToMerchant] Showing dedicated sell price tip in hover container: {hoveredPriceInTip}G");
-                return;
-            }
-
-            HideNativeSellPriceTipClone();
-            #endif
             HideFallbackSellPricePanel();
         }
 
@@ -970,59 +1011,6 @@ namespace SellToMerchant
             return position;
         }
 
-        #if false
-        private static void ApplySellPriceTipText(Control tipRoot, int price)
-        {
-            HideTipIcons(tipRoot);
-
-            var textNodes = new List<object>();
-            CollectTextNodes(tipRoot, textNodes);
-            if (textNodes.Count == 0)
-                return;
-
-            SetTextNode(textNodes[0], "售价");
-            if (textNodes.Count > 1)
-                SetTextNode(textNodes[1], $"{price} 金币");
-
-            SetTextNode(textNodes[0], "\u552e\u4ef7");
-            if (textNodes.Count > 1)
-                SetTextNode(textNodes[1], $"{price} \u91d1\u5e01");
-
-            for (int i = 2; i < textNodes.Count; i++)
-                SetTextNode(textNodes[i], "");
-        }
-
-        private static void EnsureNativeSellPriceTipClone(Node host, Control templateTip, bool topLevel)
-        {
-            if (_nativeSellPriceTipClone != null && GodotObject.IsInstanceValid(_nativeSellPriceTipClone))
-            {
-                if (_nativeSellPriceTipClone.GetParent() != host)
-                {
-                    _nativeSellPriceTipClone.GetParent()?.RemoveChild(_nativeSellPriceTipClone);
-                    host.AddChild(_nativeSellPriceTipClone);
-                }
-
-                _nativeSellPriceTipClone.TopLevel = topLevel;
-                return;
-            }
-
-            _nativeSellPriceTipClone = templateTip.Duplicate() as Control;
-            if (_nativeSellPriceTipClone == null)
-                return;
-
-            _nativeSellPriceTipClone.Name = "SellToMerchantPriceHoverTip";
-            _nativeSellPriceTipClone.TopLevel = topLevel;
-            host.AddChild(_nativeSellPriceTipClone);
-            GD.Print($"[SellToMerchant] Created sell price hover tip clone from {templateTip.GetType().FullName}.");
-        }
-
-        private static void HideNativeSellPriceTipClone()
-        {
-            if (_nativeSellPriceTipClone != null && GodotObject.IsInstanceValid(_nativeSellPriceTipClone))
-                _nativeSellPriceTipClone.Visible = false;
-        }
-
-        #endif
 
         private static void EnsureFallbackSellPricePanel()
         {
@@ -1152,80 +1140,6 @@ namespace SellToMerchant
             }
         }
 
-        private static void HideTipIcons(Node root)
-        {
-            if (root is TextureRect textureRect)
-                textureRect.Visible = false;
-            else if (root is Sprite2D sprite2D)
-                sprite2D.Visible = false;
-
-            foreach (var child in root.GetChildren())
-            {
-                if (child is Node node)
-                    HideTipIcons(node);
-            }
-        }
-
-        private static void CollectTextNodes(Node root, List<object> nodes)
-        {
-            if (HasWritableTextProperty(root))
-                nodes.Add(root);
-
-            foreach (var child in root.GetChildren())
-            {
-                if (child is Node node)
-                    CollectTextNodes(node, nodes);
-            }
-        }
-
-        private static bool HasWritableTextProperty(object target)
-        {
-            var prop = target.GetType().GetProperty("Text",
-                System.Reflection.BindingFlags.Instance |
-                System.Reflection.BindingFlags.Public |
-                System.Reflection.BindingFlags.NonPublic);
-            return prop != null && prop.CanWrite && prop.PropertyType == typeof(string);
-        }
-
-        private static void SetTextNode(object target, string text)
-        {
-            var prop = target.GetType().GetProperty("Text",
-                System.Reflection.BindingFlags.Instance |
-                System.Reflection.BindingFlags.Public |
-                System.Reflection.BindingFlags.NonPublic);
-            prop?.SetValue(target, text);
-        }
-
-        private static T? FindFirst<T>(Node root) where T : Node
-        {
-            if (root is T typed) return typed;
-
-            foreach (var child in root.GetChildren())
-            {
-                if (child is Node node)
-                {
-                    var found = FindFirst<T>(node);
-                    if (found != null) return found;
-                }
-            }
-
-            return null;
-        }
-
-        private static IEnumerable<T> FindAll<T>(Node root) where T : Node
-        {
-            if (root is T typed)
-                yield return typed;
-
-            foreach (var child in root.GetChildren())
-            {
-                if (child is Node node)
-                {
-                    foreach (var found in FindAll<T>(node))
-                        yield return found;
-                }
-            }
-        }
 
         // ═══════════════════════════════════════════
         //  联机转账弹窗
@@ -1333,10 +1247,9 @@ namespace SellToMerchant
 
         private static void ClosePopup()
         {
-            _draggedPopup = null;
+            _draggedControl = null;
             _popup?.QueueFree();
             _popup = null;
-            _selectedCard = null;
             _selectedRelic = null;
             _selectedPotion = null;
             _activeRows.Clear();
@@ -1353,20 +1266,20 @@ namespace SellToMerchant
                     {
                         if (mb.Pressed)
                         {
-                            _draggedPopup = popup;
+                            _draggedControl = popup;
                             handle.AcceptEvent();
                         }
-                        else if (_draggedPopup == popup)
+                        else if (_draggedControl == popup)
                         {
-                            _draggedPopup = null;
+                            _draggedControl = null;
                             handle.AcceptEvent();
                         }
                     }
-                    else if (e is InputEventMouseMotion motion && _draggedPopup == popup)
+                    else if (e is InputEventMouseMotion motion && _draggedControl == popup)
                     {
                         if (!Input.IsMouseButtonPressed(MouseButton.Left))
                         {
-                            _draggedPopup = null;
+                            _draggedControl = null;
                             return;
                         }
 
