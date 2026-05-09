@@ -1,6 +1,7 @@
 using System.Linq;
 using System.Collections.Generic;
 using System;
+using System.Threading.Tasks;
 using HarmonyLib;
 using MegaCrit.Sts2.Core.Nodes;
 using MegaCrit.Sts2.Core.Nodes.Rooms;
@@ -63,6 +64,8 @@ namespace SellToMerchant
         {
             if (_uiLayer != null && _uiLayer.IsInsideTree())
             {
+                MultiplayerCardSellSync.EnsureRegistered();
+                MultiplayerShopSync.EnsureRegistered();
                 RefreshInfoLabels();
                 UpdateButtonStates();
                 return;
@@ -78,6 +81,8 @@ namespace SellToMerchant
             _uiLayer = new CanvasLayer { Layer = 100 };
 
             BuildSidePanel(__instance);
+            MultiplayerCardSellSync.EnsureRegistered();
+            MultiplayerShopSync.EnsureRegistered();
 
             __instance.AddChild(_uiLayer);
 
@@ -240,13 +245,26 @@ namespace SellToMerchant
             GD.Print("[SellToMerchant] Opening native card sell selector.");
             try
             {
-                var selected = await CardSelectCmd.FromDeckForRemoval(player, prefs, ShopSellManager.CanSellCard);
-                var card = selected?.FirstOrDefault();
-                if (card == null) return;
+                bool sold;
+                if (ShopSellManager.IsMultiplayerSession(player))
+                {
+                    sold = await MultiplayerCardSellSync.DoLocalSellCardAsync(player, prefs, ShopSellManager.CanSellCard);
+                }
+                else
+                {
+                    var selected = await CardSelectCmd.FromDeckForRemoval(player, prefs, ShopSellManager.CanSellCard);
+                    var card = selected?.FirstOrDefault();
+                    if (card == null) return;
 
-                await ShopSellManager.SellCardAsync(card, player);
-                RefreshInfoLabels();
-                UpdateButtonStates();
+                    await ShopSellManager.SellCardAsync(card, player);
+                    sold = true;
+                }
+
+                if (sold)
+                {
+                    RefreshInfoLabels();
+                    UpdateButtonStates();
+                }
             }
             catch (System.Threading.Tasks.TaskCanceledException)
             {
@@ -350,10 +368,16 @@ namespace SellToMerchant
                     if (_selectedRelic != null)
                     {
                         var r = _selectedRelic;
+                        int relicIndex = player.Relics.ToList().IndexOf(r);
                         ClosePopup();
-                        await ShopSellManager.SellRelicAsync(r, player);
-                        RefreshInfoLabels();
-                        UpdateButtonStates();
+                        bool sold = ShopSellManager.IsMultiplayerSession(player)
+                            ? await MultiplayerShopSync.DoLocalSellRelicAsync(player, relicIndex)
+                            : await SellRelicLocallyAsync(r, player);
+                        if (sold)
+                        {
+                            RefreshInfoLabels();
+                            UpdateButtonStates();
+                        }
                     }
                 });
             _popup.AddChild(confirmBtn);
@@ -372,6 +396,12 @@ namespace SellToMerchant
                 ShopSellManager.GetRelicSellPrice(relic),
                 pos, size,
                 () => _selectedRelic = relic);
+        }
+
+        private static async Task<bool> SellRelicLocallyAsync(RelicModel relic, Player player)
+        {
+            await ShopSellManager.SellRelicAsync(relic, player);
+            return true;
         }
 
         // ═══════════════════════════════════════════
@@ -553,10 +583,16 @@ namespace SellToMerchant
                     if (_selectedPotion != null)
                     {
                         var p = _selectedPotion;
+                        int potionIndex = player.Potions.ToList().IndexOf(p);
                         ClosePopup();
-                        await ShopSellManager.SellPotionAsync(p, player);
-                        RefreshInfoLabels();
-                        UpdateButtonStates();
+                        bool sold = ShopSellManager.IsMultiplayerSession(player)
+                            ? await MultiplayerShopSync.DoLocalSellPotionAsync(player, potionIndex)
+                            : await SellPotionLocallyAsync(p, player);
+                        if (sold)
+                        {
+                            RefreshInfoLabels();
+                            UpdateButtonStates();
+                        }
                     }
                 });
             _popup.AddChild(confirmBtn);
@@ -575,6 +611,12 @@ namespace SellToMerchant
                 ShopSellManager.GetPotionSellPrice(potion),
                 pos, size,
                 () => _selectedPotion = potion);
+        }
+
+        private static async Task<bool> SellPotionLocallyAsync(PotionModel potion, Player player)
+        {
+            await ShopSellManager.SellPotionAsync(potion, player);
+            return true;
         }
 
         private static string SafeItemName(LocString? title, object fallbackId)
@@ -1157,6 +1199,7 @@ namespace SellToMerchant
             ClosePopup();
 
             _selectedReceiver = teammates[0];
+            var receiverName = GetPlayerDisplayName(_selectedReceiver);
 
             _popup = new Control();
             _popup.Position = new Vector2(200, 100);
@@ -1172,6 +1215,7 @@ namespace SellToMerchant
                 Position = new Vector2(10, 8)
             };
             _popup.AddChild(title);
+            title.Text = $"杞处缁? {receiverName}  (涓婇檺 {ShopSellManager.MaxGoldTransfer} G)";
 
             _amountInput = new NMegaLineEdit
             {
@@ -1205,16 +1249,132 @@ namespace SellToMerchant
             var sender = ShopSellManager.GetShopPlayer();
             if (sender == null) return;
 
-            bool ok = await ShopSellManager.TransferGoldAsync(sender, _selectedReceiver, amount);
+            bool ok = ShopSellManager.IsMultiplayerSession(sender)
+                ? await MultiplayerShopSync.DoLocalTransferGoldAsync(sender, _selectedReceiver, amount)
+                : await ShopSellManager.TransferGoldAsync(sender, _selectedReceiver, amount);
             GD.Print($"[SellToMerchant] Transfer {(ok ? "OK" : "FAILED")}: {amount}G");
 
             ClosePopup();
             UpdateButtonStates();
         }
 
+        private static bool TryBlockUnsupportedMultiplayerAction(Player player, string actionName)
+        {
+            if (!ShopSellManager.IsMultiplayerSession(player))
+                return false;
+
+            ShowInfoPopup($"{actionName}\u529f\u80fd\u6682\u5728\u591a\u4eba\u6a21\u5f0f\u4e0b\u7981\u7528\uff0c\u4ee5\u907f\u514d\u8054\u673a\u4e0d\u540c\u6b65\u3002");
+            GD.Print($"[SellToMerchant] Blocked multiplayer action: {actionName}.");
+            return true;
+        }
+
         // ═══════════════════════════════════════════
         //  提示弹窗
         // ═══════════════════════════════════════════
+
+        private static string GetPlayerDisplayName(Player player)
+        {
+            if (TryGetReadableMemberText(player, out var playerName,
+                    "DisplayName", "PlayerName", "Nickname", "NickName", "Name", "UserName", "Username", "SteamName"))
+                return playerName;
+
+            if (player.Character != null)
+            {
+                if (TryGetReadableMemberText(player.Character, out var characterName,
+                        "DisplayName", "Name", "Title"))
+                    return characterName;
+
+                var fallbackCharacterName = SafeItemName(player.Character.Title, player.NetId);
+                if (!string.IsNullOrWhiteSpace(fallbackCharacterName))
+                    return fallbackCharacterName;
+            }
+
+            return $"Player {player.NetId}";
+        }
+
+        private static bool TryGetReadableMemberText(object source, out string text, params string[] memberNames)
+        {
+            const System.Reflection.BindingFlags flags =
+                System.Reflection.BindingFlags.Instance |
+                System.Reflection.BindingFlags.Public |
+                System.Reflection.BindingFlags.NonPublic;
+
+            foreach (var memberName in memberNames)
+            {
+                var property = source.GetType().GetProperty(memberName, flags);
+                if (property != null && property.GetIndexParameters().Length == 0)
+                {
+                    try
+                    {
+                        if (TryConvertDisplayValueToText(property.GetValue(source), out text))
+                            return true;
+                    }
+                    catch
+                    {
+                    }
+                }
+
+                var field = source.GetType().GetField(memberName, flags);
+                if (field != null)
+                {
+                    try
+                    {
+                        if (TryConvertDisplayValueToText(field.GetValue(source), out text))
+                            return true;
+                    }
+                    catch
+                    {
+                    }
+                }
+            }
+
+            text = string.Empty;
+            return false;
+        }
+
+        private static bool TryConvertDisplayValueToText(object? value, out string text)
+        {
+            if (value is null)
+            {
+                text = string.Empty;
+                return false;
+            }
+
+            if (value is string rawText)
+            {
+                text = rawText.Trim();
+                return !string.IsNullOrWhiteSpace(text);
+            }
+
+            if (value is LocString locString)
+            {
+                text = SafeItemName(locString, string.Empty).Trim();
+                return !string.IsNullOrWhiteSpace(text);
+            }
+
+            foreach (var methodName in new[] { "GetFormattedText", "GetRawText" })
+            {
+                var method = value.GetType().GetMethod(methodName, Type.EmptyTypes);
+                if (method == null || method.ReturnType != typeof(string))
+                    continue;
+
+                try
+                {
+                    if (method.Invoke(value, null) is string reflectedText &&
+                        !string.IsNullOrWhiteSpace(reflectedText))
+                    {
+                        text = reflectedText.Trim();
+                        return true;
+                    }
+                }
+                catch
+                {
+                }
+            }
+
+            text = string.Empty;
+            return false;
+        }
 
         private static void ShowInfoPopup(string message)
         {

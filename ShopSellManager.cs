@@ -40,6 +40,12 @@ namespace SellToMerchant
 
         public const int MaxGoldTransfer = 200;
 
+        public static bool IsMultiplayerSession(Player player)
+        {
+            var runState = player.RunState;
+            return runState != null && runState.Players.Count > 1;
+        }
+
         // ═══════════════════════════════════════
         //  卡牌可售性
         // ═══════════════════════════════════════
@@ -119,8 +125,14 @@ namespace SellToMerchant
         //  执行出售
         // ═══════════════════════════════════════
 
-        public static async Task SellCardAsync(CardModel card, Player player)
+        public static async Task SellCardAsync(CardModel card, Player player, bool allowSynchronizedMultiplayer = false)
         {
+            if (IsMultiplayerSession(player) && !allowSynchronizedMultiplayer)
+            {
+                GD.Print("[SellToMerchant] Card selling is disabled in multiplayer to avoid choice desync.");
+                return;
+            }
+
             int price = GetCardSellPrice(card);
             if (price <= 0) return;
 
@@ -131,8 +143,14 @@ namespace SellToMerchant
             GD.Print($"[SellToMerchant] Sold card '{card.Title}' for {price} gold.");
         }
 
-        public static async Task SellRelicAsync(RelicModel relic, Player player)
+        public static async Task SellRelicAsync(RelicModel relic, Player player, bool allowSynchronizedMultiplayer = false)
         {
+            if (IsMultiplayerSession(player) && !allowSynchronizedMultiplayer)
+            {
+                GD.Print("[SellToMerchant] Relic selling is disabled in multiplayer until it has a synchronized implementation.");
+                return;
+            }
+
             int price = GetRelicSellPrice(relic);
             if (price <= 0) return;
 
@@ -143,8 +161,14 @@ namespace SellToMerchant
             GD.Print($"[SellToMerchant] Sold relic '{relic.Title}' for {price} gold.");
         }
 
-        public static async Task SellPotionAsync(PotionModel potion, Player player)
+        public static async Task SellPotionAsync(PotionModel potion, Player player, bool allowSynchronizedMultiplayer = false)
         {
+            if (IsMultiplayerSession(player) && !allowSynchronizedMultiplayer)
+            {
+                GD.Print("[SellToMerchant] Potion selling is disabled in multiplayer until it has a synchronized implementation.");
+                return;
+            }
+
             int price = GetPotionSellPrice(potion);
             if (price <= 0) return;
 
@@ -159,8 +183,14 @@ namespace SellToMerchant
         //  联机转账（每店限一次）
         // ═══════════════════════════════════════
 
-        public static async Task<bool> TransferGoldAsync(Player sender, Player receiver, int amount)
+        public static async Task<bool> TransferGoldAsync(Player sender, Player receiver, int amount, bool allowSynchronizedMultiplayer = false)
         {
+            if (IsMultiplayerSession(sender) && !allowSynchronizedMultiplayer)
+            {
+                GD.Print("[SellToMerchant] Gold transfer is disabled in multiplayer until it has a synchronized implementation.");
+                return false;
+            }
+
             if (TransferUsedThisShop) return false;
             if (amount <= 0) return false;
             if (amount > MaxGoldTransfer) return false;

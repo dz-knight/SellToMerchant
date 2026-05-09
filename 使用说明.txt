@@ -1,57 +1,48 @@
-SellToMerchant v1.0.1
+SellToMerchant v1.0.5 使用说明
 
-功能
-- 在商店出售卡牌
-- 在商店出售遗物
-- 在商店出售药水
-- 联机时可在商店转账金币
+一、功能简介
+- 在商店出售卡牌、遗物、药水换取金币
+- 联机模式下支持同步卖卡、卖遗物、卖药水和转账
+- 进入游戏后自动检测更新，支持自动下载或跳转 GitHub
 
-安装方法
-1. 解压压缩包。
-2. 将压缩包里的 SellToMerchant 文件夹放到游戏目录的 mods 文件夹下。
-3. 最终目录结构应为：
-   Slay the Spire 2\mods\SellToMerchant\SellToMerchant.dll
-   Slay the Spire 2\mods\SellToMerchant\SellToMerchant.json
+二、安装方式
+1. 下载与你当前游戏分支对应的压缩包
+   - 正式版：SellToMerchant-stable.zip
+   - public-beta：SellToMerchant-public-beta.zip
+2. 解压到：
+   Slay the Spire 2\mods\SellToMerchant
+3. 确认目录中包含：
+   - SellToMerchant.dll
+   - SellToMerchant.json
+4. 重启游戏
 
-使用说明
-- 进入商店后，右侧会出现出售面板。
+三、使用说明
+- 进入商店后，右侧会出现出售面板
 - 每个商店内：
-  卡牌最多出售 1 次
-  遗物最多出售 1 次
-  药水最多出售 1 次
-  转账最多使用 1 次
+  - 卡牌最多出售 1 次
+  - 遗物最多出售 1 次
+  - 药水最多出售 1 次
+  - 转账最多使用 1 次
 
-售价规则
-- 卡牌
-  Common: 25 金币
-  Uncommon: 37 金币
-  Rare: 75 金币
-
+四、售价规则
+- 卡牌 / 药水
+  - Common：25 金币
+  - Uncommon：37 金币
+  - Rare：75 金币
 - 遗物
-  售价 = 商店原价的一半
+  - 售价 = 商店原价的一半
 
-- 药水
-  Common: 25 金币
-  Uncommon: 37 金币
-  Rare: 75 金币
-
-限制
-- 基础牌、诅咒牌、状态牌、不可移除牌不能出售
-- 起始遗物、事件遗物、不可交易遗物不能出售
-- 空药水或已移除药水不能出售
+五、限制说明
+- 基础牌、诅咒牌、状态牌、任务牌、事件牌、Token 牌、不可移除牌不可出售
+- 起始遗物、事件遗物、Ancient 遗物、不可交易遗物不可出售
 - 单次转账上限 200 金币
 
-版本适配
-- 支持正式版与 public-beta 分支检测
-- 自动更新会根据当前游戏分支选择对应更新包
+六、自动更新
+- 进入游戏后会自动检查 GitHub 最新版本
+- 若发现新版本，可选择：
+  - 自动爬取更新
+  - 打开 GitHub 自行下载
+  - 暂不更新
 
-自动更新说明
-- 模组启动时会检查 GitHub 最新 Release
-- 正式版使用：
-  SellToMerchant-stable.zip
-- public-beta 使用：
-  SellToMerchant-public-beta.zip
-- 下载更新后，通常需要重启游戏才能生效
-
-GitHub 仓库
-- https://github.com/jiahaoyin254-collab/SellToMerchant
+七、项目地址
+- https://github.com/dz-knight/SellToMerchant
