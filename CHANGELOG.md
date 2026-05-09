@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.0.5
+
+- Added an in-game auto-update prompt with three choices: automatic GitHub download, open GitHub manually, or skip.
+- Delayed the update check until the startup UI is ready and switched package download to the GitHub asset API for better reliability.
+- Reworked the update popup into a fixed, centered, draggable overlay with explicit progress and completion states.
+- Restored multiplayer card selling through the game's native synchronized card-removal flow.
+- Re-enabled multiplayer relic selling, potion selling, and teammate gold transfer through dedicated synchronized network messages.
+- Improved teammate name resolution in the transfer popup and refreshed branch-aware update handling for `stable` and `public-beta`.
+
 ## v1.0.4
 
 - Fixed public-beta v0.105.0 compatibility for native card sell price binding.

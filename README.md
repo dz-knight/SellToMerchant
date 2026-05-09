@@ -2,6 +2,13 @@
 
 Sell cards, relics, and potions at the merchant in Slay the Spire 2.
 
+## 中文说明
+
+- 进入商店后可出售卡牌、遗物、药水换取金币。
+- 联机模式下支持同步卖卡、卖遗物、卖药水和队友转账。
+- 模组进入游戏后会自动检查更新，可选择自动下载、打开 GitHub 或暂不更新。
+- 发布包分为 `SellToMerchant-stable.zip` 和 `SellToMerchant-public-beta.zip` 两个分支版本。
+
 ## Features
 
 - Sell removable cards for gold at the merchant.
@@ -48,6 +55,15 @@ dotnet build .\SellToMerchant.csproj -c Release
 
 ## Release Notes
 
+### v1.0.5
+
+- Added an in-game auto-update prompt with automatic GitHub download, manual GitHub open, and skip options.
+- Reworked the update popup to be centered, draggable, and progress-aware.
+- Switched auto-update downloads to the GitHub asset API for more reliable package retrieval.
+- Restored multiplayer card selling through the native synchronized selector flow.
+- Re-enabled multiplayer relic selling, potion selling, and gold transfer through synchronized network messages.
+- Improved teammate name display in the transfer popup.
+
 ### v1.0.4
 
 - Fixed public-beta v0.105.0 compatibility for native card sell price binding.
@@ -74,5 +90,5 @@ dotnet build .\SellToMerchant.csproj -c Release
 
 ## Compatibility
 
-Validated against Slay the Spire 2 `public-beta v0.105.0`.
+Validated against Slay the Spire 2 `public-beta v0.105.1`.
 Future game updates may require another rebuild if UI or model structures change.

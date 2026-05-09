@@ -12,7 +12,8 @@ namespace SellToMerchant
 
         public static void Initialize()
         {
-            GD.Print("[SellToMerchant] Initializing v1.0.4...");
+            GD.Print("[SellToMerchant] Initializing v1.0.5...");
+            AutoUpdate.CaptureMainThreadContext();
 
             _harmony = new Harmony(HarmonyId);
             _harmony.PatchAll();
@@ -22,7 +23,7 @@ namespace SellToMerchant
 
             // Branch-aware auto update: when the user switches between stable
             // and public-beta, the updater switches to the matching release asset.
-            _ = AutoUpdate.CheckForUpdateAsync(versionInfo);
+            _ = AutoUpdate.CheckForUpdateAfterStartupAsync(versionInfo);
 
             GD.Print("[SellToMerchant] Patches applied. Mod loaded.");
         }
