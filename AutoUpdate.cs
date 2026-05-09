@@ -16,8 +16,10 @@ namespace SellToMerchant
         private const string GithubRepo = "dz-knight/SellToMerchant";
         private const string GithubRepoUrl = "https://github.com/dz-knight/SellToMerchant";
         private const string CurrentVersion = "1.0.5";
-        private const string StateFileName = "SellToMerchant.update-state.json";
-        private const string ResultFileName = "SellToMerchant.update-result.json";
+        private const string StateFileName = "SellToMerchant.update-state.dat";
+        private const string ResultFileName = "SellToMerchant.update-result.dat";
+        private const string LegacyStateFileName = "SellToMerchant.update-state.json";
+        private const string LegacyResultFileName = "SellToMerchant.update-result.json";
 
         private static readonly System.Net.Http.HttpClient Http = new()
         {
@@ -58,9 +60,10 @@ namespace SellToMerchant
             {
                 var modDir = GetModDirectory();
                 var statePath = Path.Combine(modDir, StateFileName);
-                var state = UpdateState.Load(statePath);
+                var legacyStatePath = Path.Combine(modDir, LegacyStateFileName);
+                var state = LoadUpdateState(statePath, legacyStatePath);
                 var expectedChannel = ChannelId(versionInfo.Channel);
-                var forceChannelSwitch = !string.Equals(state.InstalledChannel, expectedChannel, StringComparison.OrdinalIgnoreCase);
+                var hasRecordedChannel = !string.IsNullOrWhiteSpace(state.InstalledChannel);
 
                 var release = await FetchLatestReleaseAsync();
                 if (release == null)
@@ -81,16 +84,18 @@ namespace SellToMerchant
 
                 var latestVersion = release.Value.Version;
                 var needsVersionUpdate = IsNewer(latestVersion, CurrentVersion);
-                GD.Print($"[SellToMerchant] Auto update version comparison. Current={CurrentVersion}, Latest={latestVersion}, ForceChannelSwitch={forceChannelSwitch}, NeedsUpdate={needsVersionUpdate}");
-
-                if (!needsVersionUpdate && !forceChannelSwitch)
+                if (!needsVersionUpdate)
                 {
                     state.InstalledVersion = CurrentVersion;
                     state.InstalledChannel = expectedChannel;
-                    state.Save(statePath);
+                    SaveUpdateState(state, statePath, legacyStatePath);
                     GD.Print($"[SellToMerchant] Up to date on channel '{expectedChannel}' (v{CurrentVersion}).");
                     return;
                 }
+
+                var forceChannelSwitch = hasRecordedChannel &&
+                    !string.Equals(state.InstalledChannel, expectedChannel, StringComparison.OrdinalIgnoreCase);
+                GD.Print($"[SellToMerchant] Auto update version comparison. Current={CurrentVersion}, Latest={latestVersion}, RecordedChannel='{state.InstalledChannel}', ExpectedChannel='{expectedChannel}', ForceChannelSwitch={forceChannelSwitch}, NeedsUpdate={needsVersionUpdate}");
 
                 RunOnMainThread(() => ShowUpdatePrompt(versionInfo, release.Value, asset, needsVersionUpdate), "show update prompt");
             }
@@ -329,7 +334,7 @@ namespace SellToMerchant
         private static void LaunchUpdater(UpdateStageInfo stage, string targetVersion, string targetChannel)
         {
             var modDir = GetModDirectory();
-            var resultPath = Path.Combine(modDir, ResultFileName);
+                var resultPath = Path.Combine(modDir, ResultFileName);
             var updaterScriptPath = Path.Combine(stage.TempDirectory, "apply-update.ps1");
             var gameExePath = OS.GetExecutablePath();
             var processId = System.Environment.ProcessId;
@@ -376,13 +381,19 @@ Start-Process -FilePath $gameExe -WorkingDirectory (Split-Path -Parent $gameExe)
         {
             try
             {
-                var resultPath = Path.Combine(GetModDirectory(), ResultFileName);
-                if (!File.Exists(resultPath))
+                var modDir = GetModDirectory();
+                var resultPath = Path.Combine(modDir, ResultFileName);
+                var legacyResultPath = Path.Combine(modDir, LegacyResultFileName);
+                var existingResultPath = File.Exists(resultPath)
+                    ? resultPath
+                    : File.Exists(legacyResultPath) ? legacyResultPath : null;
+
+                if (existingResultPath == null)
                     return;
 
-                var json = File.ReadAllText(resultPath);
+                var json = File.ReadAllText(existingResultPath);
                 var result = JsonSerializer.Deserialize<UpdateResultRecord>(json);
-                File.Delete(resultPath);
+                File.Delete(existingResultPath);
 
                 if (result == null || string.IsNullOrWhiteSpace(result.Version))
                     return;
@@ -394,6 +405,28 @@ Start-Process -FilePath $gameExe -WorkingDirectory (Split-Path -Parent $gameExe)
             {
                 GD.Print($"[SellToMerchant] Failed to read update result marker: {ex.Message}");
             }
+        }
+
+        private static UpdateState LoadUpdateState(string statePath, string legacyStatePath)
+        {
+            var state = UpdateState.Load(statePath);
+            if (!string.IsNullOrWhiteSpace(state.InstalledVersion) || !string.IsNullOrWhiteSpace(state.InstalledChannel))
+                return state;
+
+            var legacyState = UpdateState.Load(legacyStatePath);
+            if (string.IsNullOrWhiteSpace(legacyState.InstalledVersion) && string.IsNullOrWhiteSpace(legacyState.InstalledChannel))
+                return legacyState;
+
+            SaveUpdateState(legacyState, statePath, legacyStatePath);
+            GD.Print("[SellToMerchant] Migrated legacy auto update state file.");
+            return legacyState;
+        }
+
+        private static void SaveUpdateState(UpdateState state, string statePath, string legacyStatePath)
+        {
+            state.Save(statePath);
+            if (File.Exists(legacyStatePath))
+                File.Delete(legacyStatePath);
         }
 
         private static UpdateOverlay? EnsureOverlay()

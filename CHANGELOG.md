@@ -8,6 +8,8 @@
 - Restored multiplayer card selling through the game's native synchronized card-removal flow.
 - Re-enabled multiplayer relic selling, potion selling, and teammate gold transfer through dedicated synchronized network messages.
 - Improved teammate name resolution in the transfer popup and refreshed branch-aware update handling for `stable` and `public-beta`.
+- Fixed a false-positive update prompt when the local mod was already on `v1.0.5`.
+- Moved updater state/result markers away from `.json` filenames to avoid being scanned as mod manifests.
 
 ## v1.0.4
 
